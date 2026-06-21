@@ -1,0 +1,66 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Implementation of first real database model
+
+model User {
+  id        String   @id @default(cuid())
+  name      String?
+  email     String   @unique
+  password  String?
+  role      Role     @default(CUSTOMER)
+
+  store     Store?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum Role {
+  CUSTOMER
+  SELLER
+  ADMIN
+}
+
+// Store Model Implementation
+
+model Store {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  logoUrl     String?
+
+  ownerId     String  @unique
+  owner       User    @relation(fields: [ownerId], references: [id])
+
+  product     Product[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Product {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  price       Decimal @db.Decimal(10, 2)
+  stock       Int     @default(0)
+  isActive    Boolean @default(false) // When a seller uploads a product, it will not be published immediately unless it is approved by the administrator.
+
+  storeId     String
+  store       Store   @relation(fields: [storeId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
