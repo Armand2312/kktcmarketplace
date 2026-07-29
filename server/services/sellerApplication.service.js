@@ -1,4 +1,7 @@
 import { prisma } from "@/lib/prisma";
+import { ValidationError } from "../errors/ValidationError";
+import { NotFoundError } from "../errors/NotFoundError";
+import { ConflictError } from "../errors/ConflictError";
 
 /**
  * Approves a pending seller application.
@@ -11,7 +14,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function approveSellerApplication(applicationId) {
   if (!applicationId) {
-    throw new Error("Seller application ID is required.");
+    throw new ValidationError("Seller application ID is required.");
   }
 
   const application = await prisma.sellerApplication.findUnique({
@@ -28,15 +31,15 @@ export async function approveSellerApplication(applicationId) {
   });
 
   if (!application) {
-    throw new Error("Seller application was not found.");
+    throw new NotFoundError("Seller application was not found.");
   }
-
+  // Örneğin Başvuru Durumu: APPROVED, ama istenen islem: Tekrar APPROVE, Bu nedenle: ConflictError -> 409 Conflict
   if (application.status !== "PENDING") {
-    throw new Error("Only pending seller applications can be approved.");
+    throw new ConflictError("Only pending seller applications can be approved.");
   }
-
+  // Kullanıcı zaten bir mağazaya sahip olduğu için yeni mağaza oluşturma isteği mevcut kaynak durumuyla çelişir -> 409 Conflict
   if (application.applicant.store) {
-    throw new Error("The applicant already owns a store.");
+    throw new ConflictError("The applicant already owns a store.");
   }
 
   // Where the Concept of Atomicity Initiates!
@@ -77,4 +80,167 @@ export async function approveSellerApplication(applicationId) {
       store,
     };
   });
+}
+
+
+/**
+ * This service code below rejects a pending seller application.
+ *
+ * A rejected application:
+ * 1. Changes its status from PENDING to REJECTED
+ * 2. Stores the rejection reason
+ * 3. Records when the application was reviewed
+ *
+ * The applicant's user role is not changed,
+ * and no store is created.
+ */
+
+export async function rejectSellerApplication(
+  applicationId,
+  rejectionReason
+) {
+  if(!applicationId) {
+    throw new ValidationError("Seller application ID is required.");
+  }
+
+  if (
+    typeof rejectionReason !== "string" ||
+    rejectionReason.trim().length === 0
+  ) {
+    /** Burada ValidationError kullanıyoruz çünkü gönderilen veri:
+     * 
+     * eksik olabilir,
+     * yanlış türde olabilir,
+     * boş olabilir.
+     */
+    throw new ValidationError("Rejection reason is required.");
+  }
+
+  const application = await prisma.sellerApplication.findUnique({
+    where: {
+      id: applicationId,
+    },
+  });
+  // Başvuru bulunmadığında NotFoundError
+  if(!application){
+    throw new NotFoundError("Seller application was not found.");
+  }
+  // Başvuru daha önce işlenmişse ConflictError
+  if(application.status !== "PENDING") {
+    throw new ConflictError("Only pending seller applications can be rejected.");
+  }
+
+  const rejectedApplication =
+    await prisma.sellerApplication.update({
+      where: {
+        id: application.id,
+      },
+
+      data: {
+        status: "REJECTED",
+        rejectionReason: rejectionReason.trim(),
+        reviewedAt: new Date(),
+      },
+    });
+
+    return rejectedApplication;
+}
+
+
+/**
+ * Returns all pending seller application.
+ * 
+ * Applications are ordered from oldest to newest so that
+ * earlier applications can be reviewed first.
+ */
+
+export async function getPendingSellerApplications() {
+  const applications = await prisma.sellerApplication.findMany({
+    where: {
+      status: "PENDING",
+    },
+
+    orderBy: {
+      createdAt: "asc",
+    },
+
+    include: {
+      applicant: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+        },
+      },
+    },
+  });
+
+  return applications;
+}
+
+/*
+findUnique()
+→ kayıt yoksa null
+
+findMany()
+→ kayıt yoksa []
+*/
+
+
+/**
+ * Returns a seller application by its unique ID.
+ * 
+ * The related applicant information is included,
+ * but sensitive user fields are not returned.
+ */
+
+export async function getSellerApplicationById(applicationId){
+  if(!applicationId) {
+    throw new ValidationError("Seller application ID is required.");
+  }
+
+  const application = await prisma.sellerApplication.findUnique({
+    where: {
+      id: applicationId,
+    },
+
+    include: {
+      applicant: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+        },
+      },
+    },
+  });
+
+  if(!application){
+    throw new NotFoundError("Seller application was not found.");
+  }
+  return application;
+}
+
+
+/**
+ * Returns the seller application belonging to a specific applicant.
+ * 
+ * Each user can have at most one seller application because
+ * applicantId is unique in the database schema.
+ */
+
+export async function getSellerApplicationByApplicantId(applicantId){
+  if(!applicantId) {
+    throw new ValidationError("ApplicantId is required.");
+  }
+
+  const application = await prisma.sellerApplication.findUnique({
+    where: {
+      applicantId,
+    },
+  });
+
+  return application;
 }
