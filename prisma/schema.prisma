@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                String             @id @default(cuid())
+  name              String?
+  email             String             @unique
+  password          String?
+  role              Role               @default(CUSTOMER)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  store             Store?
+  sellerApplication SellerApplication?
+}
+
+model Store {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  logoUrl     String?
+  ownerId     String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products Product[]
+  owner    User      @relation(fields: [ownerId], references: [id])
+}
+
+model Product {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  price       Decimal @db.Decimal(10, 2)
+  stock       Int     @default(0)
+  isActive    Boolean @default(false)
+
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id])
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum Role {
+  CUSTOMER
+  SELLER
+  ADMIN
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  slug        String    @unique
+  description String?
+  isActive    Boolean   @default(true)
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+enum SellerApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model SellerApplication {
+  id              String                  @id @default(cuid())
+  businessName    String
+  description     String?
+  phoneNumber     String
+  businessEmail   String
+  address         String
+  taxNumber       String?
+  status          SellerApplicationStatus @default(PENDING)
+  rejectionReason String?
+
+  applicantId String @unique
+  applicant   User   @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  reviewedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
