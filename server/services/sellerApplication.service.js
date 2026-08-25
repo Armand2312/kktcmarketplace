@@ -33,7 +33,7 @@ export async function approveSellerApplication(applicationId) {
   if (!application) {
     throw new NotFoundError("Seller application was not found.");
   }
-  // Örneğin Başvuru Durumu: APPROVED, ama istenen islem: Tekrar APPROVE, Bu nedenle: ConflictError -> 409 Conflict
+  // Örneğin Başvuru Durumu: APPROVED, ama istenen işlem: Tekrar APPROVE, Bu nedenle: ConflictError -> 409 Conflict
   if (application.status !== "PENDING") {
     throw new ConflictError("Only pending seller applications can be approved.");
   }
@@ -43,7 +43,7 @@ export async function approveSellerApplication(applicationId) {
   }
 
   // Where the Concept of Atomicity Initiates!
-  // If any of these operations fail, transcation will be failed and each of these operation will automatically rollback.
+  // If any of these operations fail, transcation will be failed and each of these operations will be automatically rollbacked.
   // API Route dosyası hem HTTP hem de business logic ile uğraşmasın diye bu işlemleri burada yapıyoruz.
   return prisma.$transaction(async (tx) => {
     const approvedApplication = await tx.sellerApplication.update({
